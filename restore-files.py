@@ -95,7 +95,7 @@ def process_placeholder(dirpath, placeholder_filename, target_dir, archive_dir, 
             os.makedirs(dirpath, exist_ok=True)
             shutil.copy(archived_file, target_file)
             os.remove(placeholder_file)
-            log_and_print(f"RESTORED: {target_file}")
+            log_and_print(f"\nRESTORED: {target_file}")
             return "restored"
         except Exception as e:
             log_and_print(f"Error during restore of {target_file}: {e}", level="error")
