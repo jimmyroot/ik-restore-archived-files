@@ -1,3 +1,4 @@
+from locale import normalize
 import os
 import shutil
 import argparse
@@ -38,15 +39,34 @@ def log_and_print(message, level="info"):
     elif level == "error":
         logging.error(message)
 
-def validate_paths(target_dir, archive_dir):
+def construct_and_validate_paths(target_dir, archive_root):
+
     if not os.path.isdir(target_dir):
         raise ValueError(f"Target directory does not exist: {target_dir}")
-    if not os.path.isdir(archive_dir):
-        raise ValueError(f"Archive directory does not exist: {archive_dir}")
+    else: 
+        # Construct the paths
+        normalized_path = os.path.normpath(target_dir)
+        split_path = normalized_path.split(os.path.sep)
 
-def collect_txt_placeholders(target_dir):
+        if "Shared" in split_path:
+            index = split_path.index("Shared")    
+            path_without_root = os.path.join(*split_path[index:])
+        else:
+            raise ValueError(f"Target directory must contain 'Shared' in the path (this script only works with Egnyte's 'Shared' directory): {target_dir}")
+        
+        full_archive_path = os.path.join(archive_root, path_without_root)
+        
+        if not os.path.isdir(full_archive_path):
+            raise ValueError(f"Archive directory does not exist: {full_archive_path}")
+        else:
+            log_and_print(f"=== Target path is: {target_dir} ===")
+            log_and_print(f"=== Archive path is: {full_archive_path} ===")
+    
+    return full_archive_path
+
+def collect_txt_placeholders(path_to_target):
     placeholder_txt_files = []
-    for dirpath, _, filenames in os.walk(target_dir):
+    for dirpath, _, filenames in os.walk(path_to_target):
         for filename in filenames:
             if not filename.endswith(".txt"):
                 continue
@@ -67,11 +87,11 @@ def collect_txt_placeholders(target_dir):
 
     return placeholder_txt_files
 
-def process_placeholder(dirpath, placeholder_filename, target_dir, archive_dir, dry_run):
+def process_placeholder(dirpath, placeholder_filename, path_to_target, path_to_archive, dry_run):
     # Get the original filename, path, archived file name, placeholder, blah blah blah
     original_filename = placeholder_filename[:-4]
-    relative_path = os.path.relpath(dirpath, target_dir)
-    archived_file = os.path.join(archive_dir, relative_path, original_filename)
+    relative_path = os.path.relpath(dirpath, path_to_target)
+    archived_file = os.path.join(path_to_archive, relative_path, original_filename)
     target_file = os.path.join(dirpath, original_filename)
     placeholder_file = os.path.join(dirpath, placeholder_filename)
 
@@ -102,17 +122,18 @@ def process_placeholder(dirpath, placeholder_filename, target_dir, archive_dir, 
             return "error"
 
 # Main function to run the restore loop
-def restore_archived_files(target_dir, archive_dir, dry_run=True):
-    validate_paths(target_dir, archive_dir)
-    placeholders = collect_txt_placeholders(target_dir)
+def restore_archived_files(target_dir, archive_root, dry_run=True):
+    path_to_target = target_dir
+    path_to_archive= construct_and_validate_paths(target_dir, archive_root)
+    placeholders = collect_txt_placeholders(path_to_target)
 
     restored = 0
     skipped = 0
     missing = 0
     errors = 0
 
-    for dirpath, filename in tqdm(placeholders, desc="Processing files", unit="file"):
-        result = process_placeholder(dirpath, filename, target_dir, archive_dir, dry_run)
+    for dirpath, filename in tqdm(placeholders, desc="Restoring files", unit="file"):
+        result = process_placeholder(dirpath, filename, path_to_target, path_to_archive, dry_run)
 
         match result:
             case "restored":
@@ -131,21 +152,20 @@ def restore_archived_files(target_dir, archive_dir, dry_run=True):
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Restore files from an archive directory to the original location")
-    parser.add_argument("--target", "-t", required=True, help="Path to the target directory containing the .txt placeholders")
-    parser.add_argument("--archive", "-a", required=True, help="Path to the archive directory with the files to restore")
+    parser.add_argument("--target-dir", "-t", required=True, help="Path to the target directory containing the .txt placeholders")
+    parser.add_argument("--archive-root", "-a", required=True, help="Drive letter or mount point of the archive root directory")
     parser.add_argument("--dry-run", "-d", action="store_true", help="Simulate a restoration without actually moving files")
     parser.add_argument("--log", "-l", action="store_true", help="Enable logging")
-    # parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
 
     args = parser.parse_args()
 
     try:
         mode = "DRY RUN" if args.dry_run else "RESTORE"
-        print(f"=== Script starting up ===\n=== We are in {mode} mode ===\n")
+        print(f"=== Script starting up ===\n=== We are in {mode} mode ===\n=== The time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
 
         log_path = setup_logger(enable_logging=args.log, dry_run=args.dry_run)
         restored, skipped, missing, errors = restore_archived_files(
-            args.target, args.archive, dry_run=args.dry_run
+            args.target_dir, args.archive_root, dry_run=args.dry_run
         )
     
         summary = (
@@ -157,7 +177,7 @@ def main():
 
         if log_path:
             print(f"Log file created: {log_path}")
-            print("=== Script finished ===")
+            print(f"=== Script finished at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
             print("=== Exiting... ===")
             print("=== Goodbye! ===")
         
