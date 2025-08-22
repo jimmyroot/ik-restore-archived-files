@@ -187,3 +187,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+"""
+TODOs
+- [ ] Add a verification step to ensure that if we are on windows, a 
+      proper drive letter was used e.g. regex to match letter and colon (X:)
+- [ ] Add a progress indicator for the os.walk loop
+"""
